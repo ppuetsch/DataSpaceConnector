@@ -98,12 +98,12 @@ public class ProviderContractNegotiationManagerImpl implements ProviderContractN
      */
     @Override
     public NegotiationResult declined(ClaimToken token, String correlationId) {
-        var negotiation = negotiationStore.findForCorrelationId(correlationId);
+        var negotiation = findContractNegotiationById(correlationId);
         if (negotiation == null) {
             return NegotiationResult.failure(FATAL_ERROR);
         }
 
-        monitor.debug("[Provider] Contract rejection received. Abort negotiation process");
+        monitor.debug("[Provider] Contract rejection received. Abort negotiation process.");
 
         // Remove agreement if present
         if (negotiation.getContractAgreement() != null) {
@@ -116,6 +116,15 @@ public class ProviderContractNegotiationManagerImpl implements ProviderContractN
                 negotiation.getId(), ContractNegotiationStates.from(negotiation.getState())));
 
         return NegotiationResult.success(negotiation);
+    }
+
+    private ContractNegotiation findContractNegotiationById(String negotiationId) {
+        var negotiation = negotiationStore.find(negotiationId);
+        if (negotiation == null) {
+            negotiation = negotiationStore.findForCorrelationId(negotiationId);
+        }
+
+        return negotiation;
     }
 
     /**
@@ -142,7 +151,7 @@ public class ProviderContractNegotiationManagerImpl implements ProviderContractN
 
         negotiationStore.save(negotiation);
         observable.invokeForEach(l -> l.requested(negotiation));
-        
+
         monitor.debug(String.format("[Provider] ContractNegotiation initiated. %s is now in state %s.",
                 negotiation.getId(), ContractNegotiationStates.from(negotiation.getState())));
 
@@ -193,11 +202,11 @@ public class ProviderContractNegotiationManagerImpl implements ProviderContractN
 
         if (result.failed()) {
             monitor.debug("[Provider] Contract offer received. Will be rejected.");
-            negotiation.setErrorDetail("Contract rejected."); //TODO set error detail
+            negotiation.setErrorDetail(result.getFailureMessages().get(0));
             negotiation.transitionDeclining();
             negotiationStore.save(negotiation);
             observable.invokeForEach(l -> l.declining(negotiation));
-            
+
             monitor.debug(String.format("[Provider] ContractNegotiation %s is now in state %s.",
                     negotiation.getId(), ContractNegotiationStates.from(negotiation.getState())));
             return NegotiationResult.success(negotiation);
